@@ -1,370 +1,288 @@
-"use client";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { getMovieInfo, getTrendingMovies } from "@/lib/api";
 import { Movie } from "@/types/movie";
+import Link from "next/link";
 import MovieGrid from "@/components/MovieGrid";
-import { GENRES } from "@/lib/api";
+import WatchButton from "@/components/WatchButton";
+import MoviePoster from "@/components/MoviePoster";
 
-const YEARS = [
-  "All Years",
-  ...Array.from({ length: 10 }, (_, i) => String(new Date().getFullYear() - i)),
-];
-const SORT_OPTIONS = ["Most Popular", "Latest", "Top Rated"];
+interface Props {
+  params: Promise<{ id: string }>;
+}
 
-export default function MoviesPage() {
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [genre, setGenre] = useState("All Genres");
-  const [year, setYear] = useState("All Years");
-  const [sort, setSort] = useState("Most Popular");
-  const [heroIndex, setHeroIndex] = useState(0);
+export async function generateMetadata({ params }: Props) {
+  try {
+    const { id } = await params;
+    const movie = await getMovieInfo(decodeURIComponent(id));
+    return { title: `${movie.title} — CineStream` };
+  } catch {
+    return { title: "Movie — CineStream" };
+  }
+}
 
-  const loaderRef = useRef<HTMLDivElement>(null);
-  const loadingRef = useRef(false);
-  const hasMoreRef = useRef(true);
-  const pageRef = useRef(1);
-  const genreRef = useRef(genre);
-  const yearRef = useRef(year);
-  const sortRef = useRef(sort);
+export default async function MovieDetailPage({ params }: Props) {
+  const { id } = await params;
+  let movie: Movie | null = null;
+  let related: Movie[] = [];
 
-  const fetchMovies = useCallback(async (reset: boolean) => {
-    if (loadingRef.current) return;
-    loadingRef.current = true;
-    setLoading(true);
+  try {
+    [movie, related] = await Promise.all([
+      getMovieInfo(decodeURIComponent(id)),
+      getTrendingMovies(),
+    ]);
+  } catch {
+    return <ErrorState />;
+  }
 
-    const fetchPage = reset ? 1 : pageRef.current;
-    const currentGenre = genreRef.current;
-    const currentYear = yearRef.current;
-    const currentSort = sortRef.current;
+  if (!movie) return <ErrorState />;
 
-    try {
-      let url = `/api/movies?page=${fetchPage}`;
-      if (currentGenre !== "All Genres")
-        url += `&genre=${encodeURIComponent(currentGenre)}`;
-
-      const res = await fetch(url);
-      const data = await res.json();
-      let results: Movie[] = data.results || [];
-
-      if (currentYear !== "All Years") {
-        results = results.filter((m) => m.releaseDate?.includes(currentYear));
-      }
-      if (currentSort === "Top Rated") {
-        results.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-      } else if (currentSort === "Latest") {
-        results.sort((a, b) =>
-          (b.releaseDate || "").localeCompare(a.releaseDate || ""),
-        );
-      }
-
-      const more = data.hasNextPage ?? true;
-      const nextPage = fetchPage + 1;
-
-      hasMoreRef.current = more;
-      pageRef.current = nextPage;
-
-      if (reset) {
-        setMovies(results);
-        setHeroIndex(0);
-      } else {
-        setMovies((prev) => {
-          const ids = new Set(prev.map((m) => m.id));
-          return [...prev, ...results.filter((m) => !ids.has(m.id))];
-        });
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      loadingRef.current = false;
-      setLoading(false);
-    }
-  }, []);
-
-  // On filter change
-  useEffect(() => {
-    genreRef.current = genre;
-    yearRef.current = year;
-    sortRef.current = sort;
-    hasMoreRef.current = true;
-    pageRef.current = 1;
-    fetchMovies(true);
-  }, [genre, year, sort]);
-
-  // Auto-rotate hero every 3 seconds
-  useEffect(() => {
-    if (movies.length === 0) return;
-    const interval = setInterval(() => {
-      setHeroIndex((prev) => (prev + 1) % Math.min(movies.length, 10));
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [movies.length]);
-
-  // Infinite scroll observer
-  useEffect(() => {
-    const el = loaderRef.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (
-          entries[0].isIntersecting &&
-          !loadingRef.current &&
-          hasMoreRef.current
-        ) {
-          fetchMovies(false);
-        }
-      },
-      { rootMargin: "400px" },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [fetchMovies]);
-
-  const heroMovie = movies[heroIndex] || null;
+  const firstEpisode = movie.episodes?.[0];
 
   return (
     <div>
-      {/* Page Hero */}
+      {/* Hero Backdrop */}
       <div
         style={{
           position: "relative",
-          height: "380px",
+          height: "70vh",
+          minHeight: "500px",
           overflow: "hidden",
-          marginBottom: "0",
         }}
       >
-        {movies.slice(0, 10).map((m, i) => (
-          <div
-            key={m.id}
-            style={{
-              position: "absolute",
-              inset: 0,
-              backgroundImage: `url(${m.image})`,
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-              filter: "blur(6px) brightness(0.35)",
-              transform: "scale(1.1)",
-              opacity: i === heroIndex ? 1 : 0,
-              transition: "opacity 0.8s ease-in-out",
-            }}
-          />
-        ))}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            backgroundImage: `url(${movie.image})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center top",
+            filter: "blur(3px) brightness(0.35)",
+            transform: "scale(1.05)",
+          }}
+        />
         <div
           style={{
             position: "absolute",
             inset: 0,
             background:
-              "linear-gradient(to bottom, rgba(10,10,15,0.3), rgba(10,10,15,1))",
-            zIndex: 1,
+              "linear-gradient(to right, rgba(10,10,15,0.97) 35%, rgba(10,10,15,0.3) 80%), linear-gradient(to top, rgba(10,10,15,1) 0%, transparent 60%)",
           }}
         />
+
+        {/* Content row */}
         <div
           style={{
             position: "relative",
-            zIndex: 2,
             height: "100%",
             display: "flex",
-            flexDirection: "column",
-            justifyContent: "center",
-            padding: "0 max(1.5rem, calc((100% - 1400px) / 2 + 1.5rem))",
+            alignItems: "flex-end",
+            padding: "2rem max(1.5rem, calc((100% - 1400px) / 2 + 1.5rem))",
+            gap: "2.5rem",
           }}
         >
-          <h1
+          {/* Poster */}
+          <div
             style={{
-              fontSize: "clamp(2.5rem, 6vw, 4rem)",
-              fontWeight: 800,
-              letterSpacing: "-1px",
-              margin: 0,
-            }}
-            className="gradient-text"
-          >
-            Movies
-          </h1>
-          <p
-            style={{
-              color: "var(--text-secondary)",
-              marginTop: "0.5rem",
-              fontSize: "1rem",
+              flexShrink: 0,
+              width: "180px",
+              borderRadius: "14px",
+              overflow: "hidden",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
+              border: "1px solid var(--border)",
+              alignSelf: "flex-end",
             }}
           >
-            Explore our collection of the latest and greatest films.
-          </p>
+            <MoviePoster src={movie.image} alt={movie.title} />
+          </div>
 
-          {/* Dots */}
-          {movies.length > 0 && (
-            <div style={{ display: "flex", gap: "6px", marginTop: "1rem" }}>
-              {movies.slice(0, 10).map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setHeroIndex(i)}
-                  style={{
-                    width: i === heroIndex ? "24px" : "8px",
-                    height: "8px",
-                    borderRadius: "4px",
-                    background:
-                      i === heroIndex
-                        ? "var(--accent)"
-                        : "rgba(255,255,255,0.3)",
-                    border: "none",
-                    cursor: "pointer",
-                    transition: "all 0.3s ease",
-                    padding: 0,
-                  }}
-                />
-              ))}
+          {/* Info */}
+          <div style={{ flex: 1, paddingBottom: "0.5rem" }}>
+            <h1
+              style={{
+                fontSize: "clamp(1.8rem, 4vw, 3rem)",
+                fontWeight: 800,
+                margin: "0 0 0.75rem",
+                letterSpacing: "-0.5px",
+              }}
+            >
+              {movie.title}
+            </h1>
+
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "10px",
+                marginBottom: "1rem",
+                fontSize: "0.875rem",
+                color: "var(--text-secondary)",
+              }}
+            >
+              {movie.releaseDate && <span>📅 {movie.releaseDate}</span>}
+              {movie.rating && movie.rating > 0 && (
+                <span style={{ color: "var(--star)" }}>⭐ {movie.rating}</span>
+              )}
+              {movie.duration && <span>⏱ {movie.duration}</span>}
+              {movie.country && <span>🌍 {movie.country}</span>}
             </div>
-          )}
+
+            {/* Genres */}
+            {movie.genres && movie.genres.length > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "6px",
+                  marginBottom: "1rem",
+                }}
+              >
+                {movie.genres.map((g) => (
+                  <span key={g} className="badge">
+                    {g}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Description */}
+            {movie.description && (
+              <p
+                style={{
+                  color: "var(--text-secondary)",
+                  fontSize: "0.9rem",
+                  lineHeight: 1.65,
+                  maxWidth: "600px",
+                  marginBottom: "1.5rem",
+                  display: "-webkit-box",
+                  WebkitLineClamp: 3,
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
+                }}
+              >
+                {movie.description}
+              </p>
+            )}
+
+            {/* Buttons */}
+            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+              {firstEpisode && (
+                <WatchButton
+                  episodeId={firstEpisode.id}
+                  mediaId={movie.id}
+                  movieTitle={movie.title}
+                />
+              )}
+              {!firstEpisode && (
+                <p style={{ color: "var(--text-muted)", fontSize: "0.875rem" }}>
+                  No episodes available
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
+      {/* Full Details */}
       <div
         style={{
           maxWidth: "1400px",
           margin: "0 auto",
-          padding: "0 1.5rem 3rem",
+          padding: "2.5rem 1.5rem",
         }}
       >
-        {/* Filters */}
-        <div
-          style={{
-            display: "flex",
-            gap: "12px",
-            flexWrap: "wrap",
-            marginBottom: "2rem",
-            paddingTop: "1.5rem",
-          }}
-        >
-          <Select
-            value={genre}
-            onChange={setGenre}
-            options={["All Genres", ...GENRES]}
-          />
-          <Select value={year} onChange={setYear} options={YEARS} />
-          <Select value={sort} onChange={setSort} options={SORT_OPTIONS} />
-        </div>
-
-        {/* Skeletons */}
-        {loading && movies.length === 0 ? (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-              gap: "1rem",
-            }}
-          >
-            {Array.from({ length: 18 }).map((_, i) => (
-              <div key={i}>
-                <div
-                  className="skeleton"
-                  style={{ paddingBottom: "145%", borderRadius: "12px" }}
-                />
-                <div
-                  className="skeleton"
-                  style={{
-                    height: "14px",
-                    marginTop: "8px",
-                    width: "80%",
-                    borderRadius: "6px",
-                  }}
-                />
-                <div
-                  className="skeleton"
-                  style={{
-                    height: "12px",
-                    marginTop: "6px",
-                    width: "50%",
-                    borderRadius: "6px",
-                  }}
-                />
-              </div>
-            ))}
+        {movie.description && (
+          <div style={{ marginBottom: "2.5rem", maxWidth: "800px" }}>
+            <SectionTitle>Synopsis</SectionTitle>
+            <p
+              style={{
+                color: "var(--text-secondary)",
+                lineHeight: 1.75,
+                fontSize: "0.95rem",
+              }}
+            >
+              {movie.description}
+            </p>
           </div>
-        ) : (
-          <>
-            <MovieGrid movies={movies} />
-
-            {movies.length === 0 && !loading && (
-              <div
-                style={{
-                  textAlign: "center",
-                  padding: "4rem",
-                  color: "var(--text-muted)",
-                }}
-              >
-                <p>No movies found for this filter.</p>
-              </div>
-            )}
-          </>
         )}
 
-        {/* Infinite scroll trigger */}
-        <div
-          ref={loaderRef}
-          style={{
-            marginTop: "2rem",
-            height: "60px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          {loading && movies.length > 0 && (
-            <div style={{ display: "flex", gap: "6px" }}>
-              {[0, 1, 2].map((i) => (
-                <div
-                  key={i}
+        {movie.casts && movie.casts.length > 0 && (
+          <div style={{ marginBottom: "2.5rem" }}>
+            <SectionTitle>Cast</SectionTitle>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+              {movie.casts.map((c) => (
+                <span
+                  key={c}
                   style={{
-                    width: "8px",
-                    height: "8px",
-                    borderRadius: "50%",
-                    background: "var(--accent)",
-                    animation: `bounce 0.8s ease-in-out ${i * 0.15}s infinite`,
+                    background: "var(--bg-card)",
+                    border: "1px solid var(--border)",
+                    padding: "5px 12px",
+                    borderRadius: "20px",
+                    fontSize: "0.85rem",
+                    color: "var(--text-secondary)",
                   }}
-                />
+                >
+                  {c}
+                </span>
               ))}
             </div>
-          )}
-        </div>
-      </div>
+          </div>
+        )}
 
-      <style>{`
-        @keyframes bounce {
-          0%, 100% { transform: translateY(0); opacity: 0.4; }
-          50% { transform: translateY(-8px); opacity: 1; }
-        }
-      `}</style>
+        {related.length > 0 && (
+          <MovieGrid movies={related.slice(0, 12)} title="More Movies" />
+        )}
+      </div>
     </div>
   );
 }
 
-function Select({
-  value,
-  onChange,
-  options,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  options: string[];
-}) {
+function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
+    <h2
       style={{
-        background: "var(--bg-card)",
-        border: "1px solid var(--border)",
+        fontSize: "1.1rem",
+        fontWeight: 700,
+        marginBottom: "0.75rem",
         color: "var(--text-primary)",
-        padding: "0.55rem 1rem",
-        borderRadius: "8px",
-        fontSize: "0.875rem",
-        cursor: "pointer",
-        outline: "none",
-        minWidth: "140px",
+        display: "flex",
+        alignItems: "center",
+        gap: "8px",
       }}
     >
-      {options.map((opt) => (
-        <option key={opt} value={opt} style={{ background: "var(--bg-card)" }}>
-          {opt}
-        </option>
-      ))}
-    </select>
+      <span
+        style={{
+          width: "3px",
+          height: "1.1rem",
+          background: "var(--accent)",
+          borderRadius: "2px",
+          display: "inline-block",
+        }}
+      />
+      {children}
+    </h2>
+  );
+}
+
+function ErrorState() {
+  return (
+    <div
+      style={{
+        textAlign: "center",
+        padding: "8rem 1rem",
+        color: "var(--text-muted)",
+      }}
+    >
+      <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>😕</div>
+      <h2 style={{ color: "var(--text-secondary)" }}>Movie not found</h2>
+      <Link
+        href="/movies"
+        style={{
+          color: "var(--accent)",
+          marginTop: "1rem",
+          display: "inline-block",
+        }}
+      >
+        ← Back to Movies
+      </Link>
+    </div>
   );
 }
