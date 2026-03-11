@@ -1,65 +1,194 @@
-import Image from "next/image";
+import Link from "next/link";
+import { getTrendingMovies, getRecentMovies } from "@/lib/api";
+import MovieGrid from "@/components/MovieGrid";
+import { Movie } from "@/types/movie";
 
-export default function Home() {
+export const revalidate = 300;
+
+export default async function HomePage() {
+  let trending: Movie[] = [];
+  let recent: Movie[] = [];
+
+  try {
+    const results = await Promise.allSettled([
+      getTrendingMovies(),
+      getRecentMovies(),
+    ]);
+    if (results[0].status === "fulfilled") trending = results[0].value ?? [];
+    if (results[1].status === "fulfilled") recent = results[1].value ?? [];
+  } catch {
+    // API may be unavailable
+  }
+
+  const hero = trending && trending.length > 0 ? trending[0] : null;
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <div>
+      {hero && (
+        <div
+          style={{
+            position: "relative",
+            height: "75vh",
+            minHeight: "500px",
+            overflow: "hidden",
+            marginBottom: "3rem",
+          }}
+        >
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              backgroundImage: `url(${hero.image})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center top",
+              filter: "blur(2px) brightness(0.45)",
+              transform: "scale(1.05)",
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              background:
+                "linear-gradient(to right, rgba(10,10,15,0.95) 40%, rgba(10,10,15,0.2) 100%), linear-gradient(to top, rgba(10,10,15,1) 0%, transparent 50%)",
+            }}
+          />
+          <div
+            style={{
+              position: "relative",
+              height: "100%",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "flex-end",
+              padding: "3rem 1.5rem",
+              maxWidth: "700px",
+            }}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            <div className="fade-up">
+              <span className="badge" style={{ marginBottom: "1rem" }}>
+                🎬 Featured
+              </span>
+            </div>
+            <h1
+              className="fade-up fade-up-delay-1"
+              style={{
+                fontSize: "clamp(2rem, 5vw, 3.5rem)",
+                fontWeight: 800,
+                lineHeight: 1.1,
+                margin: "0 0 1rem",
+                letterSpacing: "-0.5px",
+              }}
+            >
+              {hero.title}
+            </h1>
+            {hero.releaseDate && (
+              <p
+                className="fade-up fade-up-delay-2"
+                style={{
+                  color: "var(--text-secondary)",
+                  fontSize: "0.9rem",
+                  marginBottom: "1.5rem",
+                  display: "flex",
+                  gap: "12px",
+                  flexWrap: "wrap",
+                }}
+              >
+                <span>📅 {hero.releaseDate}</span>
+                {hero.rating && hero.rating > 0 && (
+                  <span>⭐ {hero.rating}</span>
+                )}
+              </p>
+            )}
+            <div
+              className="fade-up fade-up-delay-3"
+              style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}
+            >
+              <Link href={`/movies/${encodeURIComponent(hero.id)}`}>
+                <button
+                  className="btn-primary"
+                  style={{
+                    fontSize: "1rem",
+                    padding: "0.75rem 2rem",
+                    borderRadius: "10px",
+                  }}
+                >
+                  ▶ Watch Now
+                </button>
+              </Link>
+              <Link href={`/movies/${encodeURIComponent(hero.id)}`}>
+                <button
+                  style={{
+                    background: "rgba(255,255,255,0.08)",
+                    color: "var(--text-primary)",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    padding: "0.75rem 2rem",
+                    borderRadius: "10px",
+                    fontSize: "1rem",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  ℹ More Info
+                </button>
+              </Link>
+            </div>
+          </div>
         </div>
-      </main>
+      )}
+
+      <div
+        style={{ maxWidth: "1400px", margin: "0 auto", padding: "0 1.5rem" }}
+      >
+        {trending && trending.length > 0 && (
+          <MovieGrid movies={trending} title="Trending Movies" />
+        )}
+        {recent && recent.length > 0 && (
+          <MovieGrid movies={recent} title="Recently Added" />
+        )}
+        {(!trending || trending.length === 0) &&
+          (!recent || recent.length === 0) && <EmptyState />}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div
+      style={{
+        textAlign: "center",
+        padding: "6rem 1rem",
+        color: "var(--text-muted)",
+      }}
+    >
+      <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>🎬</div>
+      <h2 style={{ color: "var(--text-secondary)", marginBottom: "0.5rem" }}>
+        Could not load movies
+      </h2>
+      <p style={{ fontSize: "0.9rem" }}>
+        Make sure your Consumet API server is running and{" "}
+        <code
+          style={{
+            color: "var(--accent)",
+            background: "var(--bg-card)",
+            padding: "2px 6px",
+            borderRadius: "4px",
+          }}
+        >
+          NEXT_PUBLIC_CONSUMET_API_URL
+        </code>{" "}
+        is set correctly in .env.local
+      </p>
+      <Link
+        href="/movies"
+        style={{
+          color: "var(--accent)",
+          marginTop: "1rem",
+          display: "inline-block",
+        }}
+      >
+        Browse All Movies →
+      </Link>
     </div>
   );
 }
