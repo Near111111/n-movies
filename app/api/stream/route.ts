@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const BASE_URL = process.env.NEXT_PUBLIC_CONSUMET_API_URL || "https://api.consumet.org";
+const BASE_URL =
+  process.env.NEXT_PUBLIC_CONSUMET_API_URL || "http://localhost:3000";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -8,7 +9,10 @@ export async function GET(req: NextRequest) {
   const mediaId = searchParams.get("mediaId");
 
   if (!episodeId || !mediaId) {
-    return NextResponse.json({ error: "episodeId and mediaId are required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "episodeId and mediaId are required" },
+      { status: 400 },
+    );
   }
 
   try {
@@ -21,6 +25,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(data);
   } catch (err) {
     console.error(err);
-    return NextResponse.json({ error: "Failed to fetch stream" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch stream" },
+      { status: 500 },
+    );
   }
 }
